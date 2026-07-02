@@ -1,0 +1,1 @@
+- [Messenger Supabase setup](messenger-supabase.md) — uses Supabase directly from browser (no Express routes); env vars must be VITE_-prefixed for Vite to expose them
