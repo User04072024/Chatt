@@ -9,6 +9,7 @@ import { motion } from "framer-motion"
 export default function Login() {
   const [nombre, setNombre] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { login, user } = useUser()
   const [, setLocation] = useLocation()
 
@@ -25,11 +26,18 @@ export default function Login() {
 
     try {
       setLoading(true)
-      await login(name)
+      setError(null)
+
+      // Timeout de 10s para no quedar cargando eternamente
+      const loginPromise = login(name)
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Tiempo agotado. Verifica tu conexión.")), 10000)
+      )
+      await Promise.race([loginPromise, timeout])
       setLocation("/chat")
-    } catch (error) {
-      console.error(error)
-      // show toast or error message in a real app
+    } catch (err: any) {
+      console.error(err)
+      setError(err?.message || "No se pudo conectar con el servidor. Intenta de nuevo.")
     } finally {
       setLoading(false)
     }
@@ -51,6 +59,11 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-3 text-center">
+              {error}
+            </div>
+          )}
           <div className="relative">
             <Input 
               value={nombre}

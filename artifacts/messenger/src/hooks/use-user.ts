@@ -64,11 +64,16 @@ export function useUser() {
 
   const login = async (nombre: string) => {
     // Search for user
-    const { data: existing, error } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from("usuarios")
       .select("*")
       .eq("nombre", nombre)
       .single()
+
+    // PGRST116 = no rows found → create new user; anything else = real error
+    if (selectError && selectError.code !== "PGRST116") {
+      throw new Error(`Error al buscar usuario: ${selectError.message}`)
+    }
 
     let finalUser = existing
 
@@ -85,14 +90,15 @@ export function useUser() {
         .select()
         .single()
         
-      if (insertError) throw insertError
+      if (insertError) throw new Error(`Error al crear usuario: ${insertError.message}`)
       finalUser = created
     } else {
       // Update existing
-      await supabase
+      const { error: updateError } = await supabase
         .from("usuarios")
         .update({ online: true, last_seen: new Date().toISOString() })
         .eq("id", existing.id)
+      if (updateError) throw new Error(`Error al actualizar sesión: ${updateError.message}`)
     }
 
     localStorage.setItem("currentUser", JSON.stringify(finalUser))
