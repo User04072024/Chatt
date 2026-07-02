@@ -1,0 +1,7 @@
+{
+  "buildCommand": "pnpm --filter @workspace/messenger run build",
+  "outputDirectory": "artifacts/messenger/dist/public",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
