@@ -1,0 +1,151 @@
+Proyecto: Messenger Web con Supabase y Vercel
+
+Objetivo general
+
+Desarrollar una aplicación web tipo Messenger, sin contraseña, donde los
+usuarios ingresen únicamente con un nombre. Si el nombre no existe, se
+registra automáticamente y se le asigna un ID público.
+
+Tecnologías
+
+-   Frontend: HTML5, CSS3, JavaScript (Vanilla)
+-   Backend: Supabase (PostgreSQL, Realtime, Storage)
+-   Hosting: Vercel
+
+Estructura del proyecto
+
+messenger/ │ ├── index.html ├── chat.html ├── profile.html │ ├── css/ │
+├── style.css │ ├── login.css │ └── chat.css │ ├── js/ │ ├── config.js │
+├── supabase.js │ ├── login.js │ ├── users.js │ ├── chat.js │ ├──
+upload.js │ ├── notifications.js │ ├── realtime.js │ ├──
+deleteMessages.js │ └── utils.js │ ├── assets/ ├── sql/ │ ├── tables.sql
+│ ├── policies.sql │ └── storage.sql │ ├── vercel.json └── README.md
+
+Función de cada archivo
+
+index.html
+
+Pantalla de bienvenida. - Solicitar únicamente el nombre de usuario. -
+Buscar el usuario en la base de datos. - Si no existe, crearlo
+automáticamente. - Guardar el identificador local del dispositivo. -
+Mostrar lista pública de usuarios registrados y conectados. - Redirigir
+al chat.
+
+chat.html
+
+Aplicación principal. Debe contener: - Barra lateral con usuarios. -
+Estado (en línea, desconectado). - Buscador. - Conversaciones
+privadas. - Caja para escribir. - Envío de imágenes y videos. -
+Indicador “escribiendo…”. - Estado del mensaje (enviado, recibido,
+visto). - Responsive.
+
+profile.html
+
+Editar: - Nombre - Foto - Estado - Descripción
+
+css/style.css
+
+Estilos globales: - Variables CSS - Tema claro/oscuro - Tipografía -
+Botones - Scrollbars - Animaciones
+
+css/login.css
+
+Diseño exclusivo del inicio.
+
+css/chat.css
+
+Diseño tipo Messenger: - Panel lateral - Burbujas - Lista de usuarios -
+Visor multimedia - Responsive
+
+js/config.js
+
+Configuración: - URL Supabase - Anon Key - Límite de imágenes - Límite
+de videos - Tiempo de eliminación (60 s)
+
+js/supabase.js
+
+Inicializar el cliente Supabase.
+
+js/login.js
+
+Lógica del acceso: - Crear usuario - Buscar usuario - Guardar sesión
+local
+
+js/users.js
+
+Gestión de usuarios: - Listar - Estado online/offline - Actualizar
+perfil
+
+js/chat.js
+
+Lógica principal: - Enviar mensajes - Recibir mensajes - Responder -
+Marcar como visto - Mostrar multimedia
+
+js/upload.js
+
+Subida de archivos: - Validar formatos - Comprimir imágenes - Vista
+previa - Subir a Storage
+
+js/realtime.js
+
+Escuchar cambios en tiempo real: - Mensajes - Usuarios - Estados
+
+js/notifications.js
+
+Notificaciones: - Sonido - Título - Avisos de mensajes
+
+js/deleteMessages.js
+
+Eliminar automáticamente: - Cuando un mensaje sea visto o respondido. -
+Esperar 60 segundos. - Eliminar el registro en PostgreSQL. - Eliminar el
+archivo del bucket correspondiente.
+
+js/utils.js
+
+Funciones reutilizables: - Formatear fechas - Validaciones - Generar
+avatares - Utilidades
+
+Base de datos
+
+Tabla usuarios: - id (UUID) - public_id - nombre - avatar - estado -
+online - created_at - last_seen
+
+Tabla mensajes: - id - emisor_id - receptor_id - contenido - tipo
+(texto, imagen, video) - archivo_url - estado - visto - responded -
+created_at - expires_at
+
+Storage
+
+Buckets: - imagenes - videos
+
+Flujo
+
+1.  Abrir la aplicación.
+2.  Escribir nombre.
+3.  Buscar usuario.
+4.  Si no existe, crearlo.
+5.  Mostrar lista pública de usuarios.
+6.  Elegir conversación.
+7.  Enviar mensajes o multimedia.
+8.  Actualización en tiempo real.
+9.  Al ver o responder un mensaje:
+    -   iniciar temporizador de 60 segundos.
+10. Eliminar mensaje y archivo automáticamente.
+
+Requisitos funcionales
+
+-   Sin contraseñas.
+-   ID público único.
+-   Lista pública de usuarios.
+-   Chat privado.
+-   Imágenes y videos.
+-   Indicador de escritura.
+-   Confirmaciones de envío y lectura.
+-   Eliminación automática.
+-   Compatible con plan gratuito de Supabase.
+-   Despliegue en Vercel.
+
+Objetivo final
+
+Obtener una aplicación moderna, rápida, similar a Messenger, optimizada
+para Supabase y Vercel, modular, escalable y fácil de mantener.
