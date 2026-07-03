@@ -205,16 +205,17 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
   }
 
   const sendMessage = async (contenido: string, tipo: 'texto'|'imagen'|'video'|'pegatina' = 'texto', archivo_url: string | null = null) => {
-    if (!currentUser || !selectedUserId) return
+    if (!currentUser || !selectedUserId) {
+      console.warn("[sendMessage] abortado: no hay usuario o chat seleccionado", { currentUser, selectedUserId })
+      return
+    }
 
     // Find if we are replying to any unseen messages and mark them responded
-    // This triggers auto-delete for them too if not already triggered
     const recentReceived = messages.filter(m => m.receptor_id === currentUser.id && !m.responded)
     if (recentReceived.length > 0) {
       const now = new Date()
       const expiresAt = new Date(now.getTime() + 60000).toISOString()
       const idsToUpdate = recentReceived.map(m => m.id)
-      
       supabase
         .from('mensajes')
         .update({ responded: true, expires_at: expiresAt })
@@ -222,10 +223,13 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
         .then()
     }
 
+    // For stickers, contenido is the URL so the row is never empty
+    const finalContenido = contenido || archivo_url || ""
+
     const newMsg = {
       emisor_id: currentUser.id,
       receptor_id: selectedUserId,
-      contenido,
+      contenido: finalContenido,
       tipo,
       archivo_url,
       estado: 'enviado',
@@ -233,7 +237,10 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
       responded: false
     }
 
-    await supabase.from('mensajes').insert([newMsg])
+    const { error } = await supabase.from('mensajes').insert([newMsg])
+    if (error) {
+      console.error("[sendMessage] error al insertar:", error)
+    }
   }
 
   return { messages, users, typingUsers, sendMessage, sendTyping }
