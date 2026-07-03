@@ -127,11 +127,12 @@ export default function Chat() {
     }
   }
 
-  const handleConvertToSticker = useCallback((url: string) => {
+  const handleConvertToSticker = useCallback(async (url: string) => {
     const next = saveSticker(user.id, url)
     setStickers(next)
     setImageAction(null)
-  }, [user.id])
+    await sendMessage("", "pegatina", url)
+  }, [user.id, sendMessage])
 
   const handleDeleteSticker = useCallback((url: string) => {
     setStickers(deleteSticker(user.id, url))
