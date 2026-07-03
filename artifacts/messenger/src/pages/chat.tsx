@@ -1,11 +1,15 @@
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useLocation, Link } from "wouter"
 import { useUser } from "@/hooks/use-user"
 import { useChat, Message } from "@/hooks/use-chat"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MessageSquare, Search, MoreVertical, Paperclip, Send, Check, CheckCheck, Loader2, Image as ImageIcon, X, ChevronLeft, Moon, Sun, UserCircle, LogOut } from "lucide-react"
+import {
+  MessageSquare, Search, MoreVertical, Paperclip, Send, Check, CheckCheck,
+  Loader2, X, ChevronLeft, Moon, Sun, UserCircle, LogOut,
+  Download, Smile, Trash2, ZoomIn, Sticker
+} from "lucide-react"
 import { uploadToCatbox } from "@/lib/catbox"
 import { format, isToday, isYesterday, formatDistanceToNowStrict } from "date-fns"
 import { es } from "date-fns/locale"
@@ -13,10 +17,43 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
+// ─── Sticker storage helpers ───────────────────────────────────────────────
+const STICKER_KEY = "chatt_stickers"
+function loadStickers(): string[] {
+  try { return JSON.parse(localStorage.getItem(STICKER_KEY) || "[]") } catch { return [] }
+}
+function saveSticker(url: string): string[] {
+  const stickers = loadStickers()
+  if (stickers.includes(url)) return stickers
+  const next = [url, ...stickers]
+  localStorage.setItem(STICKER_KEY, JSON.stringify(next))
+  return next
+}
+function deleteSticker(url: string): string[] {
+  const next = loadStickers().filter(s => s !== url)
+  localStorage.setItem(STICKER_KEY, JSON.stringify(next))
+  return next
+}
+
+// ─── Image download helper ─────────────────────────────────────────────────
+async function downloadImage(url: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = `chatt-${Date.now()}.${blob.type.split("/")[1] || "jpg"}`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    window.open(url, "_blank")
+  }
+}
+
 export default function Chat() {
   const { user, logout } = useUser()
   const [, setLocation] = useLocation()
-  
+
   if (!user) {
     setLocation("/")
     return null
@@ -26,18 +63,24 @@ export default function Chat() {
   const [searchQuery, setSearchQuery] = useState("")
   const [inputValue, setInputValue] = useState("")
   const [uploading, setUploading] = useState(false)
-  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list")
+
+  // Image viewer / action sheet
+  const [imageAction, setImageAction] = useState<{ url: string; mode: "actions" | "lightbox" } | null>(null)
+
+  // Sticker picker
+  const [showStickerPicker, setShowStickerPicker] = useState(false)
+  const [stickers, setStickers] = useState<string[]>(loadStickers)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  
+
   const { theme, setTheme } = useTheme()
   const { messages, users, typingUsers, sendMessage, sendTyping } = useChat(user, selectedUserId)
 
   const selectedUser = users.find(u => u.id === selectedUserId)
-  const filteredUsers = users.filter(u => 
-    u.id !== user.id && 
+  const filteredUsers = users.filter(u =>
+    u.id !== user.id &&
     u.nombre.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -57,52 +100,65 @@ export default function Chat() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    
     setUploading(true)
     try {
       const url = await uploadToCatbox(file)
-      const isVideo = file.type.startsWith('video/')
-      await sendMessage(file.name, isVideo ? 'video' : 'imagen', url)
+      const isVideo = file.type.startsWith("video/")
+      await sendMessage(file.name, isVideo ? "video" : "imagen", url)
     } catch (error) {
       console.error(error)
       alert("Error al subir el archivo")
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
+  }
+
+  const handleConvertToSticker = useCallback((url: string) => {
+    const next = saveSticker(url)
+    setStickers(next)
+    setImageAction(null)
+  }, [])
+
+  const handleDeleteSticker = useCallback((url: string) => {
+    setStickers(deleteSticker(url))
+  }, [])
+
+  const handleSendSticker = async (url: string) => {
+    setShowStickerPicker(false)
+    await sendMessage("", "pegatina", url)
   }
 
   const selectUser = (id: string) => {
     setSelectedUserId(id)
-    setMobileView('chat')
+    setMobileView("chat")
+    setShowStickerPicker(false)
   }
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
-      {/* Sidebar - Users List */}
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <div className={cn(
         "flex-col w-full md:w-[380px] border-r border-border bg-card/30",
-        mobileView === 'list' ? 'flex' : 'hidden md:flex'
+        mobileView === "list" ? "flex" : "hidden md:flex"
       )}>
         <div className="p-4 flex items-center justify-between border-b border-border bg-card">
           <h2 className="font-semibold text-xl tracking-tight">Chats</h2>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>
             <Link href="/profile">
-              <Button variant="ghost" size="icon">
-                <UserCircle className="w-5 h-5" />
-              </Button>
+              <Button variant="ghost" size="icon"><UserCircle className="w-5 h-5" /></Button>
             </Link>
           </div>
         </div>
-        
+
         <div className="p-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar chats..." 
+            <Input
+              placeholder="Buscar chats..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="pl-9 bg-card border-none h-10 rounded-xl"
@@ -112,7 +168,7 @@ export default function Chat() {
 
         <div className="flex-1 overflow-y-auto no-scrollbar p-2">
           {filteredUsers.map(u => (
-            <div 
+            <div
               key={u.id}
               onClick={() => selectUser(u.id)}
               className={cn(
@@ -133,15 +189,12 @@ export default function Chat() {
                 <div className="flex justify-between items-baseline mb-1">
                   <h3 className="font-medium truncate">{u.nombre}</h3>
                 </div>
-                <p className="text-sm text-muted-foreground truncate">
-                  {u.estado || "Disponible"}
-                </p>
+                <p className="text-sm text-muted-foreground truncate">{u.estado || "Disponible"}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Current user footer */}
         <div className="p-4 border-t border-border bg-card/50 flex items-center gap-3">
           <Avatar className="w-10 h-10">
             <AvatarImage src={user.avatar || undefined} />
@@ -157,17 +210,17 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Main Chat Area */}
+      {/* ── Main Chat Area ───────────────────────────────────────────────── */}
       <div className={cn(
         "flex-1 flex-col bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed dark:opacity-90",
-        mobileView === 'chat' ? 'flex' : 'hidden md:flex'
+        mobileView === "chat" ? "flex" : "hidden md:flex"
       )}>
         {selectedUser ? (
           <>
             {/* Header */}
             <div className="h-16 flex items-center justify-between px-4 border-b border-border bg-card shadow-sm z-10">
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={() => setMobileView('list')}>
+                <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={() => setMobileView("list")}>
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
                 <Avatar className="w-10 h-10">
@@ -187,21 +240,17 @@ export default function Chat() {
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="w-5 h-5" />
-              </Button>
+              <Button variant="ghost" size="icon"><MoreVertical className="w-5 h-5" /></Button>
             </div>
 
             {/* Messages list */}
-            <div 
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar"
-            >
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-1 no-scrollbar">
               <AnimatePresence initial={false}>
                 {messages.map((msg, idx) => {
                   const isMe = msg.emisor_id === user.id
                   const showDate = idx === 0 || !isSameDay(new Date(msg.created_at), new Date(messages[idx - 1].created_at))
-                  
+                  const isSticker = msg.tipo === "pegatina"
+
                   return (
                     <div key={msg.id}>
                       {showDate && (
@@ -211,58 +260,81 @@ export default function Chat() {
                           </span>
                         </div>
                       )}
-                      
-                      <motion.div 
+
+                      <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={cn("flex", isMe ? "justify-end" : "justify-start")}
+                        className={cn("flex mb-1", isMe ? "justify-end" : "justify-start")}
                       >
-                        <div className={cn(
-                          "max-w-[75%] md:max-w-[60%] rounded-2xl p-3 shadow-sm relative group",
-                          isMe ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border border-border rounded-bl-sm"
-                        )}>
-                          {msg.tipo === 'imagen' && msg.archivo_url && (
-                            <img 
-                              src={msg.archivo_url} 
-                              alt="Adjunto" 
-                              className="w-full max-h-64 object-cover rounded-xl mb-2 cursor-pointer"
-                              onClick={() => setLightboxUrl(msg.archivo_url)}
+                        {/* ── Pegatina: sin burbuja ── */}
+                        {isSticker && msg.archivo_url ? (
+                          <div className="flex flex-col items-end gap-1">
+                            <img
+                              src={msg.archivo_url}
+                              alt="Pegatina"
+                              className="w-36 h-36 object-contain rounded-2xl cursor-pointer hover:scale-105 transition-transform drop-shadow-md"
+                              onClick={() => setImageAction({ url: msg.archivo_url!, mode: "actions" })}
                             />
-                          )}
-                          
-                          {msg.tipo === 'video' && msg.archivo_url && (
-                            <video 
-                              src={msg.archivo_url} 
-                              controls
-                              className="w-full max-h-64 object-cover rounded-xl mb-2"
-                            />
-                          )}
-
-                          {msg.contenido && (
-                            <p className="text-sm break-words whitespace-pre-wrap">{msg.contenido}</p>
-                          )}
-                          
-                          <div className={cn(
-                            "flex items-center justify-end gap-1.5 mt-1",
-                            isMe ? "text-primary-foreground/80" : "text-muted-foreground"
-                          )}>
-                            <span className="text-[10px] uppercase font-medium tracking-wider">
-                              {format(new Date(msg.created_at), 'HH:mm')}
-                            </span>
-                            
-                            {isMe && (
-                              <span className="text-[14px]">
-                                {msg.visto ? <CheckCheck className="w-4 h-4 text-blue-300" /> : 
-                                 msg.estado === 'recibido' ? <CheckCheck className="w-4 h-4" /> : 
-                                 <Check className="w-4 h-4" />}
+                            <div className="flex items-center gap-1 px-1">
+                              <span className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">
+                                {format(new Date(msg.created_at), "HH:mm")}
                               </span>
-                            )}
-                            
-                            {msg.expires_at && (
-                              <Countdown expiresAt={msg.expires_at} />
-                            )}
+                              {isMe && (
+                                msg.visto
+                                  ? <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
+                                  : msg.estado === "recibido"
+                                  ? <CheckCheck className="w-3.5 h-3.5 text-muted-foreground" />
+                                  : <Check className="w-3.5 h-3.5 text-muted-foreground" />
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          /* ── Burbuja normal ── */
+                          <div className={cn(
+                            "max-w-[75%] md:max-w-[60%] rounded-2xl p-3 shadow-sm relative group",
+                            isMe
+                              ? "bg-primary text-primary-foreground rounded-br-sm"
+                              : "bg-card border border-border rounded-bl-sm"
+                          )}>
+                            {msg.tipo === "imagen" && msg.archivo_url && (
+                              <img
+                                src={msg.archivo_url}
+                                alt="Adjunto"
+                                className="w-full max-h-64 object-cover rounded-xl mb-2 cursor-pointer active:opacity-80 transition-opacity"
+                                onClick={() => setImageAction({ url: msg.archivo_url!, mode: "actions" })}
+                              />
+                            )}
+
+                            {msg.tipo === "video" && msg.archivo_url && (
+                              <video
+                                src={msg.archivo_url}
+                                controls
+                                className="w-full max-h-64 object-cover rounded-xl mb-2"
+                              />
+                            )}
+
+                            {msg.contenido && (
+                              <p className="text-sm break-words whitespace-pre-wrap">{msg.contenido}</p>
+                            )}
+
+                            <div className={cn(
+                              "flex items-center justify-end gap-1.5 mt-1",
+                              isMe ? "text-primary-foreground/80" : "text-muted-foreground"
+                            )}>
+                              <span className="text-[10px] uppercase font-medium tracking-wider">
+                                {format(new Date(msg.created_at), "HH:mm")}
+                              </span>
+                              {isMe && (
+                                msg.visto
+                                  ? <CheckCheck className="w-4 h-4 text-blue-300" />
+                                  : msg.estado === "recibido"
+                                  ? <CheckCheck className="w-4 h-4" />
+                                  : <Check className="w-4 h-4" />
+                              )}
+                              {msg.expires_at && <Countdown expiresAt={msg.expires_at} />}
+                            </div>
+                          </div>
+                        )}
                       </motion.div>
                     </div>
                   )
@@ -270,30 +342,92 @@ export default function Chat() {
               </AnimatePresence>
             </div>
 
+            {/* ── Sticker Picker Panel ── */}
+            <AnimatePresence>
+              {showStickerPicker && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 200, opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  className="bg-card border-t border-border overflow-hidden"
+                >
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                    <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Sticker className="w-4 h-4" /> Mis pegatinas
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowStickerPicker(false)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {stickers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
+                      <Smile className="w-8 h-8 opacity-40" />
+                      <p className="text-xs text-center">
+                        Aún no tienes pegatinas.<br />
+                        Pulsa una imagen del chat → <strong>Convertir en pegatina</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3 p-3 overflow-x-auto no-scrollbar">
+                      {stickers.map((url, i) => (
+                        <div key={i} className="relative group shrink-0">
+                          <img
+                            src={url}
+                            alt="Pegatina"
+                            className="w-20 h-20 object-contain rounded-xl cursor-pointer hover:scale-110 transition-transform border border-border bg-background/50"
+                            onClick={() => handleSendSticker(url)}
+                          />
+                          <button
+                            className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                            onClick={e => { e.stopPropagation(); setStickers(deleteSticker(url)) }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Input area */}
             <div className="p-3 bg-card border-t border-border">
               <form onSubmit={handleSend} className="flex items-end gap-2 max-w-4xl mx-auto">
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
                   accept="image/*,video/*"
                   onChange={handleFileUpload}
                 />
-                
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="icon" 
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   className="h-11 w-11 shrink-0 rounded-xl"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                 >
                   {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
                 </Button>
-                
+
+                {/* Sticker button */}
+                <Button
+                  type="button"
+                  variant={showStickerPicker ? "secondary" : "ghost"}
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-xl"
+                  onClick={() => setShowStickerPicker(v => !v)}
+                >
+                  <Sticker className="w-5 h-5" />
+                </Button>
+
                 <div className="flex-1 relative">
-                  <Input 
+                  <Input
                     value={inputValue}
                     onChange={e => {
                       setInputValue(e.target.value)
@@ -303,9 +437,9 @@ export default function Chat() {
                     className="w-full rounded-xl bg-background border-border h-11 pr-4"
                   />
                 </div>
-                
-                <Button 
-                  type="submit" 
+
+                <Button
+                  type="submit"
                   size="icon"
                   className="h-11 w-11 shrink-0 rounded-xl bg-primary hover:bg-primary/90"
                   disabled={!inputValue.trim() && !uploading}
@@ -326,29 +460,127 @@ export default function Chat() {
         )}
       </div>
 
-      {/* Lightbox for images */}
+      {/* ── Image Action Sheet ──────────────────────────────────────────── */}
       <AnimatePresence>
-        {lightboxUrl && (
-          <motion.div 
+        {imageAction && (
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setLightboxUrl(null)}
+            className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-end md:justify-center p-0 md:p-6"
+            onClick={() => setImageAction(null)}
           >
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="absolute top-4 right-4 text-white hover:bg-white/20"
-              onClick={() => setLightboxUrl(null)}
-            >
-              <X className="w-6 h-6" />
-            </Button>
-            <img src={lightboxUrl} className="max-w-full max-h-full object-contain rounded-lg" />
+            {imageAction.mode === "lightbox" ? (
+              /* ── Full Lightbox ── */
+              <motion.div
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="w-full h-full flex items-center justify-center p-4"
+                onClick={e => e.stopPropagation()}
+              >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-4 right-4 text-white hover:bg-white/20 z-10"
+                  onClick={() => setImageAction(null)}
+                >
+                  <X className="w-6 h-6" />
+                </Button>
+                <img src={imageAction.url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+              </motion.div>
+            ) : (
+              /* ── Action Sheet ── */
+              <motion.div
+                initial={{ y: 80, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 80, opacity: 0 }}
+                className="w-full md:w-[400px] bg-card rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Preview */}
+                <div className="bg-black/40 flex items-center justify-center p-4 h-52">
+                  <img
+                    src={imageAction.url}
+                    className="max-w-full max-h-full object-contain rounded-xl"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="p-2">
+                  <ActionButton
+                    icon={<ZoomIn className="w-5 h-5" />}
+                    label="Ver en pantalla completa"
+                    onClick={() => setImageAction({ url: imageAction.url, mode: "lightbox" })}
+                  />
+                  <ActionButton
+                    icon={<Download className="w-5 h-5" />}
+                    label="Descargar imagen"
+                    onClick={() => { downloadImage(imageAction.url); setImageAction(null) }}
+                  />
+                  <ActionButton
+                    icon={<Sticker className="w-5 h-5" />}
+                    label={stickers.includes(imageAction.url) ? "Ya es una pegatina ✓" : "Convertir en pegatina"}
+                    onClick={() => handleConvertToSticker(imageAction.url)}
+                    disabled={stickers.includes(imageAction.url)}
+                    accent
+                  />
+                  {stickers.includes(imageAction.url) && (
+                    <ActionButton
+                      icon={<Trash2 className="w-5 h-5" />}
+                      label="Eliminar de mis pegatinas"
+                      onClick={() => { setStickers(deleteSticker(imageAction.url)); setImageAction(null) }}
+                      danger
+                    />
+                  )}
+                </div>
+
+                <div className="p-2 border-t border-border">
+                  <button
+                    className="w-full py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-xl hover:bg-accent/30"
+                    onClick={() => setImageAction(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function ActionButton({
+  icon, label, onClick, accent, danger, disabled
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  accent?: boolean
+  danger?: boolean
+  disabled?: boolean
+}) {
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-4 px-4 py-3.5 rounded-xl text-sm font-medium transition-colors",
+        disabled
+          ? "opacity-50 cursor-not-allowed text-muted-foreground"
+          : danger
+          ? "text-destructive hover:bg-destructive/10"
+          : accent
+          ? "text-primary hover:bg-primary/10"
+          : "text-foreground hover:bg-accent/40"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 
@@ -378,10 +610,7 @@ function Countdown({ expiresAt }: { expiresAt: string }) {
   }, [expiresAt])
 
   if (secondsLeft <= 0) return null
-
   return (
-    <span className="ml-2 font-mono bg-black/20 px-1 rounded-sm text-[10px]">
-      {secondsLeft}s
-    </span>
+    <span className="ml-2 font-mono bg-black/20 px-1 rounded-sm text-[10px]">{secondsLeft}s</span>
   )
 }

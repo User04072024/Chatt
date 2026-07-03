@@ -7,7 +7,7 @@ export type Message = {
   emisor_id: string
   receptor_id: string
   contenido: string | null
-  tipo: 'texto' | 'imagen' | 'video'
+  tipo: 'texto' | 'imagen' | 'video' | 'pegatina'
   archivo_url: string | null
   estado: 'enviado' | 'recibido' | 'visto'
   visto: boolean
