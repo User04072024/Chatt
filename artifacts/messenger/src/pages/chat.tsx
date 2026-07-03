@@ -17,26 +17,36 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
-// ─── Sticker storage helpers ───────────────────────────────────────────────
-const STICKER_KEY = "chatt_stickers"
-function loadStickers(): string[] {
-  try { return JSON.parse(localStorage.getItem(STICKER_KEY) || "[]") } catch { return [] }
+// ─── URL safety ───────────────────────────────────────────────────────────
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+  } catch { return false }
 }
-function saveSticker(url: string): string[] {
-  const stickers = loadStickers()
+
+// ─── Sticker storage helpers (scoped per user) ────────────────────────────
+function stickerKey(userId: string) { return `chatt_stickers:${userId}` }
+function loadStickers(userId: string): string[] {
+  try { return JSON.parse(localStorage.getItem(stickerKey(userId)) || "[]") } catch { return [] }
+}
+function saveSticker(userId: string, url: string): string[] {
+  if (!isSafeUrl(url)) return loadStickers(userId)
+  const stickers = loadStickers(userId)
   if (stickers.includes(url)) return stickers
   const next = [url, ...stickers]
-  localStorage.setItem(STICKER_KEY, JSON.stringify(next))
+  localStorage.setItem(stickerKey(userId), JSON.stringify(next))
   return next
 }
-function deleteSticker(url: string): string[] {
-  const next = loadStickers().filter(s => s !== url)
-  localStorage.setItem(STICKER_KEY, JSON.stringify(next))
+function deleteSticker(userId: string, url: string): string[] {
+  const next = loadStickers(userId).filter(s => s !== url)
+  localStorage.setItem(stickerKey(userId), JSON.stringify(next))
   return next
 }
 
 // ─── Image download helper ─────────────────────────────────────────────────
 async function downloadImage(url: string) {
+  if (!isSafeUrl(url)) return
   try {
     const res = await fetch(url)
     const blob = await res.blob()
@@ -46,7 +56,10 @@ async function downloadImage(url: string) {
     a.click()
     URL.revokeObjectURL(a.href)
   } catch {
-    window.open(url, "_blank")
+    const parsed = new URL(url)
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      window.open(url, "_blank", "noopener,noreferrer")
+    }
   }
 }
 
@@ -70,7 +83,7 @@ export default function Chat() {
 
   // Sticker picker
   const [showStickerPicker, setShowStickerPicker] = useState(false)
-  const [stickers, setStickers] = useState<string[]>(loadStickers)
+  const [stickers, setStickers] = useState<string[]>(() => loadStickers(user.id))
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -115,14 +128,14 @@ export default function Chat() {
   }
 
   const handleConvertToSticker = useCallback((url: string) => {
-    const next = saveSticker(url)
+    const next = saveSticker(user.id, url)
     setStickers(next)
     setImageAction(null)
-  }, [])
+  }, [user.id])
 
   const handleDeleteSticker = useCallback((url: string) => {
-    setStickers(deleteSticker(url))
-  }, [])
+    setStickers(deleteSticker(user.id, url))
+  }, [user.id])
 
   const handleSendSticker = async (url: string) => {
     setShowStickerPicker(false)
@@ -381,7 +394,7 @@ export default function Chat() {
                           />
                           <button
                             className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                            onClick={e => { e.stopPropagation(); setStickers(deleteSticker(url)) }}
+                            onClick={e => { e.stopPropagation(); setStickers(deleteSticker(user.id, url)) }}
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -528,7 +541,7 @@ export default function Chat() {
                     <ActionButton
                       icon={<Trash2 className="w-5 h-5" />}
                       label="Eliminar de mis pegatinas"
-                      onClick={() => { setStickers(deleteSticker(imageAction.url)); setImageAction(null) }}
+                      onClick={() => { setStickers(deleteSticker(user.id, imageAction.url)); setImageAction(null) }}
                       danger
                     />
                   )}

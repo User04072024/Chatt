@@ -204,7 +204,7 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
     }
   }
 
-  const sendMessage = async (contenido: string, tipo: 'texto'|'imagen'|'video' = 'texto', archivo_url: string | null = null) => {
+  const sendMessage = async (contenido: string, tipo: 'texto'|'imagen'|'video'|'pegatina' = 'texto', archivo_url: string | null = null) => {
     if (!currentUser || !selectedUserId) return
 
     // Find if we are replying to any unseen messages and mark them responded
