@@ -327,7 +327,7 @@ export default function Chat() {
                               />
                             )}
 
-                            {msg.contenido && (
+                            {msg.tipo === "texto" && msg.contenido && (
                               <p className="text-sm break-words whitespace-pre-wrap">{msg.contenido}</p>
                             )}
 

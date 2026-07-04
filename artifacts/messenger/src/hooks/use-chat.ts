@@ -21,6 +21,15 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
   const [users, setUsers] = useState<User[]>([])
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const usersRef = useRef<User[]>([])
+  useEffect(() => { usersRef.current = users }, [users])
+
+  // Request notification permission on first load
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
 
   // Fetch users & subscribe to presence
   useEffect(() => {
@@ -95,6 +104,18 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
             playNotificationSound()
             if (document.hidden) {
               document.title = "• Nuevo mensaje"
+            }
+            // Browser notification — only sender name, never the content
+            if ('Notification' in window && Notification.permission === 'granted') {
+              const sender = usersRef.current.find(u => u.id === newMsg.emisor_id)
+              const senderName = sender?.nombre || "Alguien"
+              new Notification(senderName, {
+                icon: "/icons/icon-192.png",
+                badge: "/icons/icon-192.png",
+                tag: `msg-${newMsg.emisor_id}`,
+                renotify: true,
+                silent: true,
+              })
             }
             // Mark as seen immediately if we are actively viewing
             if (!document.hidden) {
