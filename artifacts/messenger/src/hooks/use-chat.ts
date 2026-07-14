@@ -118,8 +118,10 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
               })
             }
             // Mark as seen immediately if we are actively viewing
-            if (!document.hidden) {
-              markAsSeen([newMsg.id])
+                if (!document.hidden) {
+                setTimeout(() => {
+                markAsSeen([newMsg.id])
+             }, 150)
             }
           }
         } else if (payload.eventType === 'UPDATE') {
@@ -130,6 +132,23 @@ export function useChat(currentUser: User | null, selectedUserId: string | null)
       })
       .subscribe()
 
+       useEffect(() => {
+        if (!currentUser || !selectedUserId) return
+
+       const unread = messages
+         .filter(
+           m =>
+           m.receptor_id === currentUser.id &&
+           m.emisor_id === selectedUserId &&
+          !m.visto
+       )
+        .map(m => m.id)
+
+       if (unread.length) {
+        markAsSeen(unread)
+      }
+    }, [messages, currentUser?.id, selectedUserId])
+    
     // Typing indicator channel
     const sortedIds = [currentUser.id, selectedUserId].sort()
     const typingChan = supabase.channel(`typing:${sortedIds[0]}-${sortedIds[1]}`)
